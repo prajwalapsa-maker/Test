@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: #f5f5f5;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .change-folder-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .change-folder-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .current-path {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            font-family: monospace;
+            background: rgba(255,255,255,0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .main-container {
+            display: flex;
+            height: calc(100vh - 70px);
+        }
+
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+
+        .sidebar-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .tree-container {
+            padding: 10px 0;
+        }
+
+        .tree-node {
+            margin: 0;
+        }
+
+        .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            font-size: 0.9rem;
+        }
+
+        .tree-item:hover {
+            background: #f8f9fa;
+        }
+
+        .tree-item.active {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-right: 3px solid #1976d2;
+        }
+
+        .tree-item.folder {
+            font-weight: 500;
+        }
+
+        .tree-item.file {
+            color: #666;
+            padding-left: 40px;
+        }
+
+        .tree-item.file:hover {
+            color: #333;
+            background: #f0f0f0;
+        }
+
+        .expand-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #666;
+            transition: transform 0.2s ease;
+        }
+
+        .expand-icon.expanded {
+            transform: rotate(90deg);
+        }
+
+        .item-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+
+        .item-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tree-children {
+            display: none;
+            padding-left: 20px;
+        }
+
+        .tree-children.expanded {
+            display: block;
+        }
+
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+
+        .content-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .content-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .content-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .welcome-screen {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .welcome-screen .icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .welcome-screen h2 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .welcome-screen p {
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .file-content {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.6;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .file-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+        }
+
+        .file-info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .file-info-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .file-info-label {
+            font-weight: 600;
+            color: #1976d2;
+        }
+
+        .file-info-value {
+            color: #424242;
+            font-family: monospace;
+        }
+
+        .config-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .config-modal {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .config-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .folder-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .folder-input:focus {
+            outline: none;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 3px rgba(25,118,210,0.1);
+        }
+
+        .set-folder-btn {
+            background: linear-gradient(135deg, #1976d2, #1565c0);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .set-folder-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(25,118,210,0.3);
+        }
+
+        .path-examples {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .path-example {
+            background: #f0f0f0;
+            color: #666;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+
+        .path-example:hover {
+            background: #1976d2;
+            color: white;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #1976d2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px;
+            border: 1px solid #ffcdd2;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: 40%;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+            }
+            
+            .header-controls {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Scrollbar Styling */
+        .sidebar::-webkit-scrollbar,
+        .content-body::-webkit-scrollbar,
+        .file-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .sidebar::-webkit-scrollbar-track,
+        .content-body::-webkit-scrollbar-track,
+        .file-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb,
+        .content-body::-webkit-scrollbar-thumb,
+        .file-content::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover,
+        .content-body::-webkit-scrollbar-thumb:hover,
+        .file-content::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📁 File Explorer</h1>
+        <div class="header-controls" id="header-controls" style="display: none;">
+            <button class="change-folder-btn" onclick="showConfigView()">📁 Change Folder</button>
+            <div class="current-path" id="current-root-path"></div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header" id="sidebar-header">
+                📂 Folder Structure
+            </div>
+            <div class="tree-container" id="tree-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading folder structure...
+                </div>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="content-header" id="content-header" style="display: none;">
+                <div class="content-title" id="content-title">Select a file to view</div>
+            </div>
+            <div class="content-body" id="content-body">
+                <div class="welcome-screen">
+                    <div class="icon">📄</div>
+                    <h2>Welcome to File Explorer</h2>
+                    <p>Configure your root folder to start browsing files.<br>
+                    Click on folders in the left panel to expand them, and click on files to view their content here.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="config-overlay" class="config-overlay">
+        <div class="config-modal">
+            <h2 class="config-title">⚙️ Configure Root Folder</h2>
+            <div class="input-group">
+                <input type="text" id="folder-path-input" 
+                       placeholder="Enter folder path (e.g., C:\Users\YourName\Documents)" 
+                       class="folder-input">
+                <button onclick="setRootFolder()" class="set-folder-btn">Set Folder</button>
+            </div>
+            <div class="path-examples">
+                <span class="path-example" onclick="setExamplePath('C:\\Users')">C:\Users</span>
+                <span class="path-example" onclick="setExamplePath('C:\\Projects')">C:\Projects</span>
+                <span class="path-example" onclick="setExamplePath('C:\\Documents')">C:\Documents</span>
+                <span class="path-example" onclick="setExamplePath('C:\\Downloads')">C:\Downloads</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="error-message" class="error" style="display: none;"></div>
+
+    <script>
+        let rootFolderName = '';
+        let isConfigured = false;
+        let currentSelectedFile = null;
+        let expandedFolders = new Set();
+
+        // Initialize app
+        async function initializeApp() {
+            try {
+                const rootResponse = await fetch('/api/root-info');
+                const rootData = await rootResponse.json();
+                
+                if (rootData.configured) {
+                    rootFolderName = rootData.folderName;
+                    isConfigured = true;
+                    await loadFolderStructure();
+                    hideConfigView();
+                } else {
+                    showConfigView();
+                }
+            } catch (error) {
+                showConfigView();
+            }
+        }
+
+        // Show configuration view
+        function showConfigView() {
+            document.getElementById('config-overlay').style.display = 'flex';
+        }
+
+        // Hide configuration view
+        function hideConfigView() {
+            document.getElementById('config-overlay').style.display = 'none';
+            document.getElementById('header-controls').style.display = 'flex';
+        }
+
+        // Set example path
+        function setExamplePath(path) {
+            document.getElementById('folder-path-input').value = path;
+        }
+
+        // Set root folder path
+        async function setRootFolder() {
+            const folderPath = document.getElementById('folder-path-input').value.trim();
+            
+            if (!folderPath) {
+                alert('Please enter a folder path');
+                return;
+            }
+
+            try {
+                showLoading();
+                
+                const response = await fetch('/api/set-root', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ folderPath: folderPath })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    rootFolderName = result.folderName;
+                    isConfigured = true;
+                    await loadFolderStructure();
+                    hideConfigView();
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                showError(`Failed to set root folder: ${error.message}`);
+            }
+        }
+
+        // Load folder structure into sidebar tree
+        async function loadFolderStructure() {
+            try {
+                showLoading();
+                
+                // Update header
+                document.getElementById('sidebar-header').innerHTML = `📂 ${rootFolderName}`;
+                document.getElementById('current-root-path').textContent = rootFolderName;
+
+                // Load root structure
+                const response = await fetch('/api/home-structure');
+                const structure = await response.json();
+
+                if (response.ok) {
+                    renderTreeStructure(structure);
+                } else {
+                    throw new Error(structure.error);
+                }
+            } catch (error) {
+                showError(`Failed to load directory structure: ${error.message}`);
+            }
+        }
+
+        // Render tree structure in sidebar
+        function renderTreeStructure(folders, container = null, basePath = '') {
+            if (!container) {
+                container = document.getElementById('tree-container');
+                container.innerHTML = '';
+            }
+
+            folders.forEach(folder => {
+                const folderPath = basePath ? `${basePath}/${folder.name}` : folder.name;
+                const treeNode = createTreeNode(folder, folderPath);
+                container.appendChild(treeNode);
+            });
+        }
+
+        // Create tree node for folder
+        function createTreeNode(folder, folderPath) {
+            const node = document.createElement('div');
+            node.className = 'tree-node';
+
+            const item = document.createElement('div');
+            item.className = 'tree-item folder';
+            item.setAttribute('data-path', folderPath);
+
+            const hasSubfolders = folder.subFolders && folder.subFolders.length > 0;
+            
+            item.innerHTML = `
+                <span class="expand-icon">${hasSubfolders ? '▶' : ''}</span>
+                <span class="item-icon">📁</span>
+                <span class="item-name">${folder.name}</span>
+            `;
+
+            // Add click handler for folder expansion
+            item.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await toggleFolder(item, folderPath, folder);
+            });
+
+            node.appendChild(item);
+
+            // Create children container
+            if (hasSubfolders) {
+                const children = document.createElement('div');
+                children.className = 'tree-children';
+                children.style.display = 'none';
+                node.appendChild(children);
+            }
+
+            return node;
+        }
+
+        // Toggle folder expansion
+        async function toggleFolder(item, folderPath, folderData) {
+            const node = item.parentNode;
+            const children = node.querySelector('.tree-children');
+            const expandIcon = item.querySelector('.expand-icon');
+            
+            if (!children) return;
+
+            const isExpanded = children.classList.contains('expanded');
+
+            if (isExpanded) {
+                // Collapse
+                children.classList.remove('expanded');
+                children.style.display = 'none';
+                expandIcon.classList.remove('expanded');
+                expandedFolders.delete(folderPath);
+            } else {
+                // Expand
+                try {
+                    // Load folder contents if not already loaded
+                    if (!children.hasChildNodes()) {
+                        const response = await fetch(`/api/folders/${folderPath}`);
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            // Add subfolders
+                            data.folders.forEach(subfolder => {
+                                const subfolderPath = `${folderPath}/${subfolder.name}`;
+                                const subNode = createTreeNode(subfolder, subfolderPath);
+                                children.appendChild(subNode);
+                            });
+
+                            // Add files
+                            data.files.forEach(file => {
+                                const fileItem = createFileNode(file, folderPath);
+                                children.appendChild(fileItem);
+                            });
+                        } else {
+                            throw new Error(data.error);
+                        }
+                    }
+
+                    children.classList.add('expanded');
+                    children.style.display = 'block';
+                    expandIcon.classList.add('expanded');
+                    expandedFolders.add(folderPath);
+                } catch (error) {
+                    showError(`Failed to load folder contents: ${error.message}`);
+                }
+            }
+        }
+
+        // Create file node
+        function createFileNode(file, basePath) {
+            const item = document.createElement('div');
+            item.className = 'tree-item file';
+            item.setAttribute('data-path', file.path);
+
+            const extension = file.name.split('.').pop().toLowerCase();
+            let icon = '📄';
+            
+            if (['txt', 'md', 'markdown'].includes(extension)) {
+                icon = '📝';
+            } else if (['js', 'html', 'css', 'json'].includes(extension)) {
+                icon = '💻';
+            } else if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
+                icon = '🖼️';
+            } else if (['pdf'].includes(extension)) {
+                icon = '📕';
+            } else if (['doc', 'docx'].includes(extension)) {
+                icon = '📘';
+            }
+
+            item.innerHTML = `
+                <span class="expand-icon"></span>
+                <span class="item-icon">${icon}</span>
+                <span class="item-name">${file.name}</span>
+            `;
+
+            // Add click handler for file selection
+            item.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await loadFileContent(file.path, file.name);
+                setActiveItem(item);
+            });
+
+            return item;
+        }
+
+        // Set active item in tree
+        function setActiveItem(item) {
+            // Remove active class from all items
+            document.querySelectorAll('.tree-item.active').forEach(el => {
+                el.classList.remove('active');
+            });
+            
+            // Add active class to selected item
+            item.classList.add('active');
+        }
+
+        // Load and display file content
+        async function loadFileContent(filePath, fileName) {
+            try {
+                const response = await fetch(`/api/file/${filePath}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayFileContent(data, fileName);
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                showError(`Failed to load file: ${error.message}`);
+            }
+        }
+
+        // Display file content in right panel
+        function displayFileContent(fileData, fileName) {
+            const contentHeader = document.getElementById('content-header');
+            const contentTitle = document.getElementById('content-title');
+            const contentBody = document.getElementById('content-body');
+
+            contentHeader.style.display = 'flex';
+            contentTitle.textContent = fileName;
+
+            // Create file info and content
+            const fileInfo = `
+                <div class="file-info">
+                    <div class="file-info-row">
+                        <span class="file-info-label">File Name:</span>
+                        <span class="file-info-value">${fileName}</span>
+                    </div>
+                    <div class="file-info-row">
+                        <span class="file-info-label">Size:</span>
+                        <span class="file-info-value">${formatFileSize(fileData.size)}</span>
+                    </div>
+                    <div class="file-info-row">
+                        <span class="file-info-label">Last Modified:</span>
+                        <span class="file-info-value">${new Date(fileData.modified).toLocaleString()}</span>
+                    </div>
+                </div>
+                <div class="file-content">${fileData.content}</div>
+            `;
+
+            contentBody.innerHTML = fileInfo;
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Show loading
+        function showLoading() {
+            document.getElementById('tree-container').innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading folder structure...
+                </div>
+            `;
+        }
+
+        // Show error
+        function showError(message) {
+            const errorEl = document.getElementById('error-message');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            setTimeout(() => {
+                errorEl.style.display = 'none';
+            }, 5000);
+        }
+
+        // Initialize the app
+        initializeApp();
+
+        // Handle Enter key in folder input
+        document.getElementById('folder-path-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                setRootFolder();
+            }
+        });
+    </script>
+</body>
+</html>
