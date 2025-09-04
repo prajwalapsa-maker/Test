@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple File Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: #f5f5f5;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .change-folder-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .change-folder-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .current-path {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            font-family: monospace;
+            background: rgba(255,255,255,0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .main-container {
+            display: flex;
+            height: calc(100vh - 60px);
+        }
+
+        /* Left Sidebar */
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+
+        .sidebar-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .tree-container {
+            padding: 10px 0;
+        }
+
+        /* Tree Styles */
+        .folder-item {
+            padding: 8px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: background 0.2s;
+            user-select: none;
+        }
+
+        .folder-item:hover {
+            background: #f8f9fa;
+        }
+
+        .folder-item.expanded {
+            background: #e3f2fd;
+        }
+
+        .expand-icon {
+            width: 16px;
+            margin-right: 8px;
+            text-align: center;
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
+
+        .expand-icon.rotated {
+            transform: rotate(90deg);
+        }
+
+        .folder-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+
+        .folder-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .folder-children {
+            padding-left: 20px;
+            display: none;
+        }
+
+        .folder-children.show {
+            display: block;
+        }
+
+        .file-item {
+            padding: 6px 20px;
+            padding-left: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .file-item:hover {
+            background: #f0f0f0;
+        }
+
+        .file-item.active {
+            background: #e3f2fd;
+            border-right: 3px solid #1976d2;
+        }
+
+        .file-icon {
+            margin-right: 8px;
+            font-size: 14px;
+        }
+
+        .file-name {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* Right Content Area */
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+
+        .content-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            display: none;
+        }
+
+        .content-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .content-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .welcome-screen {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .welcome-screen .icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .welcome-screen h2 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .file-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .file-info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .file-info-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .file-info-label {
+            font-weight: 600;
+            color: #1976d2;
+        }
+
+        .file-info-value {
+            color: #424242;
+            font-family: monospace;
+        }
+
+        .file-content {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .file-content.image {
+            text-align: center;
+            padding: 10px;
+        }
+
+        .file-content img {
+            max-width: 100%;
+            max-height: 70vh;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .download-btn {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+
+        .download-btn:hover {
+            background: #45a049;
+        }
+
+        /* Config Modal */
+        .config-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .folder-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .folder-input:focus {
+            outline: none;
+            border-color: #1976d2;
+        }
+
+        .set-btn {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .set-btn:hover {
+            background: #1565c0;
+        }
+
+        .examples {
+            text-align: center;
+        }
+
+        .example-path {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 6px 12px;
+            margin: 5px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+
+        .example-path:hover {
+            background: #1976d2;
+            color: white;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px;
+            border: 1px solid #ffcdd2;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                height: 40%;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <h1>📁 File Explorer</h1>
+        <div class="header-controls" id="header-controls" style="display: none;">
+            <button class="change-folder-btn" onclick="showConfig()">Change Folder</button>
+            <div class="current-path" id="current-path"></div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header" id="sidebar-header">
+                📂 Select Folder
+            </div>
+            <div class="tree-container" id="tree-container">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Right Content Area -->
+        <div class="content-area">
+            <div class="content-header" id="content-header">
+                <div class="content-title" id="content-title">File Content</div>
+            </div>
+            <div class="content-body" id="content-body">
+                <div class="welcome-screen">
+                    <div class="icon">📄</div>
+                    <h2>Welcome to File Explorer</h2>
+                    <p>Select a folder to begin browsing your files.<br>
+                    Click on files to view their content here.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="config-modal" class="config-modal">
+        <div class="modal-content">
+            <h2 class="modal-title">📁 Select Folder</h2>
+            <div class="input-group">
+                <input type="text" id="folder-input" class="folder-input" 
+                       placeholder="Enter folder path (e.g., C:\Users\YourName\Documents)">
+                <button onclick="setFolder()" class="set-btn">Set</button>
+            </div>
+            <div class="examples">
+                <div class="example-path" onclick="setExample('C:\\Users')">C:\Users</div>
+                <div class="example-path" onclick="setExample('C:\\Documents')">C:\Documents</div>
+                <div class="example-path" onclick="setExample('C:\\Downloads')">C:\Downloads</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStructure = null;
+        let selectedFile = null;
+
+        // Initialize app
+        async function init() {
+            try {
+                const response = await fetch('/api/root-info');
+                const data = await response.json();
+                
+                if (data.configured) {
+                    document.getElementById('current-path').textContent = data.folderName;
+                    document.getElementById('sidebar-header').textContent = `📂 ${data.folderName}`;
+                    document.getElementById('header-controls').style.display = 'flex';
+                    hideConfig();
+                    await loadStructure();
+                } else {
+                    showConfig();
+                }
+            } catch (error) {
+                showConfig();
+            }
+        }
+
+        // Show/hide config modal
+        function showConfig() {
+            document.getElementById('config-modal').style.display = 'flex';
+        }
+
+        function hideConfig() {
+            document.getElementById('config-modal').style.display = 'none';
+        }
+
+        // Set example path
+        function setExample(path) {
+            document.getElementById('folder-input').value = path;
+        }
+
+        // Set folder
+        async function setFolder() {
+            const path = document.getElementById('folder-input').value.trim();
+            if (!path) return;
+
+            try {
+                const response = await fetch('/api/set-root', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderPath: path })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('current-path').textContent = result.folderName;
+                    document.getElementById('sidebar-header').textContent = `📂 ${result.folderName}`;
+                    document.getElementById('header-controls').style.display = 'flex';
+                    hideConfig();
+                    await loadStructure();
+                } else {
+                    alert(result.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Load folder structure
+        async function loadStructure() {
+            try {
+                document.getElementById('tree-container').innerHTML = '<div class="loading">Loading...</div>';
+                
+                const response = await fetch('/api/structure');
+                const structure = await response.json();
+                
+                currentStructure = structure;
+                renderTree(structure);
+            } catch (error) {
+                document.getElementById('tree-container').innerHTML = 
+                    '<div class="error">Error loading structure: ' + error.message + '</div>';
+            }
+        }
+
+        // Render folder tree
+        function renderTree(structure, container = null) {
+            if (!container) {
+                container = document.getElementById('tree-container');
+                container.innerHTML = '';
+            }
+
+            // Render folders
+            structure.folders.forEach(folder => {
+                const folderDiv = document.createElement('div');
+                folderDiv.innerHTML = `
+                    <div class="folder-item" onclick="toggleFolder(this, '${folder.path}')">
+                        <span class="expand-icon">${(folder.folders.length > 0 || folder.files.length > 0) ? '▶' : ''}</span>
+                        <span class="folder-icon">📁</span>
+                        <span class="folder-name">${folder.name}</span>
+                    </div>
+                    <div class="folder-children"></div>
+                `;
+                container.appendChild(folderDiv);
+            });
+
+            // Render files
+            structure.files.forEach(file => {
+                const fileDiv = document.createElement('div');
+                fileDiv.innerHTML = `
+                    <div class="file-item" onclick="selectFile('${file.path}', '${file.name}', this)">
+                        <span class="file-icon">${getFileIcon(file.type)}</span>
+                        <span class="file-name">${file.name}</span>
+                    </div>
+                `;
+                container.appendChild(fileDiv);
+            });
+        }
+
+        // Toggle folder expansion
+        function toggleFolder(element, folderPath) {
+            const expandIcon = element.querySelector('.expand-icon');
+            const children = element.parentNode.querySelector('.folder-children');
+            
+            if (children.classList.contains('show')) {
+                // Collapse
+                children.classList.remove('show');
+                expandIcon.classList.remove('rotated');
+                element.classList.remove('expanded');
+            } else {
+                // Expand
+                const folder = findFolder(currentStructure, folderPath);
+                if (folder && (folder.folders.length > 0 || folder.files.length > 0)) {
+                    children.innerHTML = '';
+                    renderTree(folder, children);
+                    children.classList.add('show');
+                    expandIcon.classList.add('rotated');
+                    element.classList.add('expanded');
+                }
+            }
+        }
+
+        // Find folder in structure
+        function findFolder(structure, path) {
+            // Search in current level
+            for (const folder of structure.folders) {
+                if (folder.path === path) return folder;
+                
+                // Search recursively
+                const found = findFolder(folder, path);
+                if (found) return found;
+            }
+            return null;
+        }
+
+        // Select file
+        async function selectFile(filePath, fileName, element) {
+            try {
+                // Remove active class from all files
+                document.querySelectorAll('.file-item.active').forEach(el => {
+                    el.classList.remove('active');
+                });
+                
+                // Add active class to selected file
+                element.classList.add('active');
+                
+                selectedFile = filePath;
+                
+                // Load file content
+                const response = await fetch(`/api/file/${filePath}`);
+                const fileData = await response.json();
+                
+                displayFileContent(fileData, fileName);
+            } catch (error) {
+                alert('Error loading file: ' + error.message);
+            }
+        }
+
+        // Display file content
+        function displayFileContent(fileData, fileName) {
+            const header = document.getElementById('content-header');
+            const title = document.getElementById('content-title');
+            const body = document.getElementById('content-body');
+            
+            header.style.display = 'block';
+            title.textContent = fileName;
+            
+            let content = `
+                <div class="file-info">
+                    <div class="file-info-row">
+                        <span class="file-info-label">Name:</span>
+                        <span class="file-info-value">${fileData.name}</span>
+                    </div>
+                    <div class="file-info-row">
+                        <span class="file-info-label">Type:</span>
+                        <span class="file-info-value">${getFileTypeName(fileData.type)}</span>
+                    </div>
+                    <div class="file-info-row">
+                        <span class="file-info-label">Size:</span>
+                        <span class="file-info-value">${formatFileSize(fileData.size)}</span>
+                    </div>
+                    <div class="file-info-row">
+                        <span class="file-info-label">Modified:</span>
+                        <span class="file-info-value">${new Date(fileData.modified).toLocaleString()}</span>
+                    </div>
+                </div>
+            `;
+            
+            // Handle different content types
+            if (fileData.isImage) {
+                content += `<div class="file-content image"><img src="${fileData.content}" alt="${fileName}"></div>`;
+            } else if (fileData.isExcel) {
+                content += `<div class="file-content excel">${fileData.content}</div>`;
+            } else if (fileData.isPdf) {
+                content += `<div class="file-content pdf">${fileData.content}</div>`;
+            } else {
+                content += `<div class="file-content">${fileData.content}</div>`;
+            }
+            
+            // Add download button for all files except plain text files
+            if (fileData.downloadable && (!fileData.isText || fileData.isExcel || fileData.isPdf)) {
+                const buttonText = fileData.isExcel || fileData.isPdf ? 
+                    '💾 Download Original File' : '💾 Download File';
+                content += `<button class="download-btn" onclick="downloadFile()">${buttonText}</button>`;
+            }
+            
+            body.innerHTML = content;
+        }
+
+        // Download file
+        function downloadFile() {
+            if (selectedFile) {
+                window.open(`/api/download/${selectedFile}`, '_blank');
+            }
+        }
+
+        // Get file icon
+        function getFileIcon(type) {
+            const icons = {
+                'txt': '📝', 'csv': '📊', 'xlsx': '📊', 'xls': '📊',
+                'docx': '📘', 'doc': '📘', 'pdf': '📕',
+                'jpg': '🖼️', 'png': '🖼️'
+            };
+            return icons[type] || '📄';
+        }
+
+        // Get file type name
+        function getFileTypeName(type) {
+            const types = {
+                // Documents
+                'txt': 'Text File', 'csv': 'CSV File', 'xlsx': 'Excel File', 'xls': 'Excel File',
+                'docx': 'Word Document', 'doc': 'Word Document', 'pdf': 'PDF Document',
+                'pptx': 'PowerPoint', 'ppt': 'PowerPoint',
+                
+                // Images  
+                'jpg': 'JPEG Image', 'jpeg': 'JPEG Image', 'png': 'PNG Image', 'gif': 'GIF Image',
+                'bmp': 'Bitmap Image', 'webp': 'WebP Image', 'svg': 'SVG Image', 'ico': 'Icon File',
+                
+                // Audio
+                'mp3': 'MP3 Audio', 'wav': 'WAV Audio', 'flac': 'FLAC Audio', 'aac': 'AAC Audio', 'ogg': 'OGG Audio',
+                
+                // Video
+                'mp4': 'MP4 Video', 'avi': 'AVI Video', 'mkv': 'MKV Video', 'mov': 'QuickTime Video',
+                'wmv': 'WMV Video', 'flv': 'Flash Video',
+                
+                // Code
+                'html': 'HTML Document', 'css': 'Stylesheet', 'js': 'JavaScript', 'json': 'JSON Data',
+                'xml': 'XML Document', 'php': 'PHP Script', 'py': 'Python Script', 'java': 'Java Source',
+                'cpp': 'C++ Source', 'c': 'C Source', 'sql': 'SQL Script',
+                
+                // Archives
+                'zip': 'ZIP Archive', 'rar': 'RAR Archive', '7z': '7-Zip Archive', 'tar': 'TAR Archive', 'gz': 'GZIP Archive',
+                
+                // System
+                'exe': 'Executable', 'msi': 'Windows Installer', 'dmg': 'Mac Disk Image', 'iso': 'ISO Image',
+                'log': 'Log File', 'ini': 'Config File', 'cfg': 'Config File', 'conf': 'Config File', 'md': 'Markdown'
+            };
+            return types[type] || (type ? type.toUpperCase() + ' File' : 'File');
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Handle Enter key in input
+        document.getElementById('folder-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') setFolder();
+        });
+
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
