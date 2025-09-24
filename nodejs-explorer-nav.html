@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Explorer with Dropdown Navigation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Left Sidebar - Dropdown Navigation */
+        .sidebar {
+            width: 280px;
+            background-color: #ffffff;
+            border-right: 1px solid #d1d1d1;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            font-weight: 600;
+            font-size: 16px;
+            color: #323130;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #edebe9;
+        }
+
+        .dropdown-container {
+            margin-bottom: 10px;
+        }
+
+        .dropdown-header {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background-color: #f3f2f1;
+            border: 1px solid #edebe9;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #323130;
+            user-select: none;
+        }
+
+        .dropdown-header:hover {
+            background-color: #edebe9;
+        }
+
+        .dropdown-arrow {
+            margin-right: 8px;
+            transition: transform 0.2s ease;
+        }
+
+        .dropdown-arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .dropdown-content {
+            display: none;
+            background-color: #ffffff;
+            border: 1px solid #edebe9;
+            border-top: none;
+            border-radius: 0 0 2px 2px;
+        }
+
+        .dropdown-content.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 8px 35px;
+            font-size: 13px;
+            color: #605e5c;
+            cursor: pointer;
+            border-bottom: 1px solid #f3f2f1;
+        }
+
+        .dropdown-item:hover {
+            background-color: #f3f2f1;
+        }
+
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .dropdown-item.active {
+            background-color: #deecf9;
+            color: #106ebe;
+            font-weight: 500;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #ffffff;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            background-color: #faf9f8;
+            border-bottom: 1px solid #edebe9;
+            gap: 15px;
+        }
+
+        .path-input-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .path-label {
+            font-size: 14px;
+            color: #323130;
+            font-weight: 500;
+        }
+
+        .path-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #d1d1d1;
+            border-radius: 2px;
+            font-size: 14px;
+            background-color: #ffffff;
+        }
+
+        .path-input:focus {
+            outline: none;
+            border-color: #0078d4;
+        }
+
+        .load-btn, .refresh-btn {
+            padding: 8px 16px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .load-btn:hover, .refresh-btn:hover {
+            background-color: #106ebe;
+        }
+
+        .refresh-btn {
+            background-color: #f3f2f1;
+            color: #323130;
+            border: 1px solid #d1d1d1;
+        }
+
+        .refresh-btn:hover {
+            background-color: #edebe9;
+        }
+
+        /* Breadcrumb */
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: #ffffff;
+            border-bottom: 1px solid #edebe9;
+            font-size: 13px;
+            color: #605e5c;
+        }
+
+        .breadcrumb-item {
+            cursor: pointer;
+            color: #0078d4;
+        }
+
+        .breadcrumb-item:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumb-separator {
+            margin: 0 8px;
+            color: #a19f9d;
+        }
+
+        /* File Explorer View */
+        .explorer-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .view-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 5px;
+        }
+
+        .view-btn {
+            padding: 6px 12px;
+            border: 1px solid #d1d1d1;
+            background-color: #ffffff;
+            cursor: pointer;
+            font-size: 12px;
+            color: #323130;
+        }
+
+        .view-btn.active {
+            background-color: #0078d4;
+            color: white;
+            border-color: #0078d4;
+        }
+
+        .sort-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #605e5c;
+        }
+
+        .sort-select {
+            padding: 4px 8px;
+            border: 1px solid #d1d1d1;
+            border-radius: 2px;
+            font-size: 12px;
+        }
+
+        /* List View */
+        .file-list {
+            display: block;
+        }
+
+        .file-list-header {
+            display: grid;
+            grid-template-columns: 40px 1fr 120px 100px 150px;
+            gap: 15px;
+            padding: 8px 12px;
+            background-color: #f8f6f4;
+            border-bottom: 1px solid #edebe9;
+            font-size: 13px;
+            font-weight: 600;
+            color: #323130;
+        }
+
+        .file-item {
+            display: grid;
+            grid-template-columns: 40px 1fr 120px 100px 150px;
+            gap: 15px;
+            padding: 8px 12px;
+            border-bottom: 1px solid #f3f2f1;
+            cursor: pointer;
+            align-items: center;
+        }
+
+        .file-item:hover {
+            background-color: #f3f2f1;
+        }
+
+        .file-item.selected {
+            background-color: #deecf9;
+        }
+
+        .file-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .file-icon svg {
+            width: 16px;
+            height: 16px;
+            fill: #605e5c;
+        }
+
+        .folder-icon svg {
+            fill: #ffb900;
+        }
+
+        .file-name {
+            font-size: 13px;
+            color: #323130;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-type, .file-size, .file-date {
+            font-size: 12px;
+            color: #605e5c;
+        }
+
+        /* Grid View */
+        .file-grid {
+            display: none;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+        }
+
+        .file-grid.active {
+            display: grid;
+        }
+
+        .grid-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px 10px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .grid-item:hover {
+            background-color: #f3f2f1;
+            border-color: #d1d1d1;
+        }
+
+        .grid-item.selected {
+            background-color: #deecf9;
+            border-color: #0078d4;
+        }
+
+        .grid-icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .grid-icon svg {
+            width: 40px;
+            height: 40px;
+            fill: #605e5c;
+        }
+
+        .grid-icon.folder svg {
+            fill: #ffb900;
+        }
+
+        .grid-name {
+            font-size: 12px;
+            color: #323130;
+            word-break: break-word;
+            line-height: 1.3;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #a19f9d;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            fill: #d2d0ce;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #605e5c;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <!-- Left Sidebar with Dropdown Navigation -->
+    <div class="sidebar">
+        <div class="sidebar-header">Navigation</div>
+        
+        <div class="dropdown-container">
+            <div class="dropdown-header" onclick="toggleDropdown('documents')">
+                <span class="dropdown-arrow">▶</span>
+                Documents
+            </div>
+            <div class="dropdown-content" id="documents">
+                <div class="dropdown-item" onclick="selectPath('C:/Users/Documents/Projects')">Projects</div>
+                <div class="dropdown-item" onclick="selectPath('C:/Users/Documents/Reports')">Reports</div>
+                <div class="dropdown-item" onclick="selectPath('C:/Users/Documents/Templates')">Templates</div>
+                <div class="dropdown-item" onclick="selectPath('C:/Users/Documents/Archive')">Archive</div>
+            </div>
+        </div>
+
+        <div class="dropdown-container">
+            <div class="dropdown-header" onclick="toggleDropdown('media')">
+                <span class="dropdown-arrow">▶</span>
+                Media
+            </div>
+            <div class="dropdown-content" id="media">
+                <div class="dropdown-item" onclick="selectPath('C:/Users/Pictures')">Pictures</div>
+                <div class="dropdown-item" onclick="selectPath('C:/Users/Videos')">Videos</div>
+                <div class="dropdown-item" onclick="selectPath('C:/Users/Music')">Music</div>
+            </div>
+        </div>
+
+        <div class="dropdown-container">
+            <div class="dropdown-header" onclick="toggleDropdown('system')">
+                <span class="dropdown-arrow">▶</span>
+                System
+            </div>
+            <div class="dropdown-content" id="system">
+                <div class="dropdown-item" onclick="selectPath('C:/Program Files')">Program Files</div>
+                <div class="dropdown-item" onclick="selectPath('C:/Windows')">Windows</div>
+                <div class="dropdown-item" onclick="selectPath('C:/Users/Downloads')">Downloads</div>
+                <div class="dropdown-item" onclick="selectPath('C:/Temp')">Temp</div>
+            </div>
+        </div>
+
+        <div class="dropdown-container">
+            <div class="dropdown-header" onclick="toggleDropdown('network')">
+                <span class="dropdown-arrow">▶</span>
+                Network Drives
+            </div>
+            <div class="dropdown-content" id="network">
+                <div class="dropdown-item" onclick="selectPath('\\\\server\\shared')">Shared Drive</div>
+                <div class="dropdown-item" onclick="selectPath('\\\\nas\\backup')">Backup Drive</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="path-input-container">
+                <span class="path-label">Path:</span>
+                <input type="text" class="path-input" id="pathInput" placeholder="Enter folder path (e.g., C:/Users/Documents)" value="">
+                <button class="load-btn" onclick="loadPath()">Load</button>
+            </div>
+            <button class="refresh-btn" onclick="refreshCurrentPath()">
+                <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; margin-right: 4px;">
+                    <path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
+                </svg>
+                Refresh
+            </button>
+        </div>
+
+        <!-- Breadcrumb -->
+        <div class="breadcrumb" id="breadcrumb">
+            <span class="breadcrumb-item" onclick="navigateToPath('')">This PC</span>
+        </div>
+
+        <!-- View Controls -->
+        <div class="view-controls">
+            <div class="view-toggle">
+                <button class="view-btn active" id="listView" onclick="setView('list')">List</button>
+                <button class="view-btn" id="gridView" onclick="setView('grid')">Grid</button>
+            </div>
+            <div class="sort-controls">
+                Sort by:
+                <select class="sort-select" id="sortSelect" onchange="sortFiles()">
+                    <option value="name">Name</option>
+                    <option value="type">Type</option>
+                    <option value="size">Size</option>
+                    <option value="date">Date Modified</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- File Explorer Content -->
+        <div class="explorer-content">
+            <div id="loadingState" class="loading" style="display: none;">
+                Loading folder contents...
+            </div>
+
+            <div id="emptyState" class="empty-state">
+                <svg viewBox="0 0 24 24">
+                    <path d="M20,6H12L10,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8A2,2 0 0,0 20,6Z"/>
+                </svg>
+                <div>Enter a folder path above to browse files and folders</div>
+            </div>
+
+            <!-- List View -->
+            <div class="file-list" id="fileList" style="display: none;">
+                <div class="file-list-header">
+                    <div></div>
+                    <div>Name</div>
+                    <div>Type</div>
+                    <div>Size</div>
+                    <div>Date Modified</div>
+                </div>
+                <div id="fileListContent"></div>
+            </div>
+
+            <!-- Grid View -->
+            <div class="file-grid" id="fileGrid"></div>
+        </div>
+    </div>
+
+    <script>
+        // SVG Icons
+        const icons = {
+            folder: `<svg viewBox="0 0 24 24"><path d="M20,6H12L10,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8A2,2 0 0,0 20,6Z"/></svg>`,
+            file: `<svg viewBox="0 0 24 24"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/></svg>`,
+            image: `<svg viewBox="0 0 24 24"><path d="M8.5,13.5L11,16.5L14.5,12L19,18H5M21,19V5C21,3.89 20.1,3 19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19Z"/></svg>`,
+            document: `<svg viewBox="0 0 24 24"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/></svg>`,
+            video: `<svg viewBox="0 0 24 24"><path d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5Z"/></svg>`,
+            music: `<svg viewBox="0 0 24 24"><path d="M12,3V13.55C11.41,13.21 10.73,13 10,13A3,3 0 0,0 7,16A3,3 0 0,0 10,19A3,3 0 0,0 13,16V7H17V5H12Z"/></svg>`
+        };
+
+        // Global state
+        let currentPath = '';
+        let currentView = 'list';
+        let selectedFiles = new Set();
+        let currentFiles = [];
+
+        // Sample file data for demonstration
+        const sampleFolderData = {
+            'C:/Users/Documents/Projects': [
+                { name: 'Website Project', type: 'folder', size: '-', date: '2024-01-15 14:30', isFolder: true },
+                { name: 'Mobile App', type: 'folder', size: '-', date: '2024-01-10 09:15', isFolder: true },
+                { name: 'README.md', type: 'Markdown File', size: '2.4 KB', date: '2024-01-20 16:45', isFolder: false },
+                { name: 'project_plan.pdf', type: 'PDF Document', size: '1.2 MB', date: '2024-01-18 11:20', isFolder: false }
+            ],
+            'C:/Users/Documents/Reports': [
+                { name: 'Q1_Report.xlsx', type: 'Excel Spreadsheet', size: '456 KB', date: '2024-01-25 13:30', isFolder: false },
+                { name: 'Annual_Summary.docx', type: 'Word Document', size: '234 KB', date: '2024-01-22 10:15', isFolder: false },
+                { name: 'Charts', type: 'folder', size: '-', date: '2024-01-20 08:45', isFolder: true }
+            ],
+            'C:/Users/Pictures': [
+                { name: 'Vacation 2023', type: 'folder', size: '-', date: '2023-12-15 14:30', isFolder: true },
+                { name: 'Screenshots', type: 'folder', size: '-', date: '2024-01-20 09:15', isFolder: true },
+                { name: 'sunset.jpg', type: 'JPEG Image', size: '2.8 MB', date: '2024-01-15 17:22', isFolder: false },
+                { name: 'family_photo.png', type: 'PNG Image', size: '5.1 MB', date: '2024-01-10 12:30', isFolder: false }
+            ]
+        };
+
+        // Dropdown functions
+        function toggleDropdown(id) {
+            const content = document.getElementById(id);
+            const header = content.previousElementSibling;
+            const arrow = header.querySelector('.dropdown-arrow');
+            
+            content.classList.toggle('show');
+            arrow.classList.toggle('expanded');
+        }
+
+        function selectPath(path) {
+            document.getElementById('pathInput').value = path;
+            loadPath();
+            
+            // Update active state
+            document.querySelectorAll('.dropdown-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // Path and navigation functions
+        function loadPath() {
+            const path = document.getElementById('pathInput').value.trim();
+            if (!path) {
+                showEmptyState();
+                return;
+            }
+            
+            currentPath = path;
+            showLoadingState();
+            
+            // Simulate loading delay
+            setTimeout(() => {
+                loadFolderContents(path);
+            }, 500);
+        }
+
+        function loadFolderContents(path) {
+            // In real implementation, this would make an API call to your Node.js backend
+            const files = sampleFolderData[path] || [];
+            currentFiles = files;
+            
+            if (files.length === 0) {
+                showEmptyState('This folder is empty or the path doesn\'t exist.');
+            } else {
+                hideLoadingState();
+                updateBreadcrumb(path);
+                displayFiles(files);
+            }
+        }
+
+        function refreshCurrentPath() {
+            if (currentPath) {
+                loadPath();
+            }
+        }
+
+        function navigateToPath(path) {
+            document.getElementById('pathInput').value = path;
+            if (path) {
+                loadPath();
+            } else {
+                showEmptyState();
+            }
+        }
+
+        // Display functions
+        function showLoadingState() {
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('fileList').style.display = 'none';
+            document.getElementById('fileGrid').style.display = 'none';
+        }
+
+        function hideLoadingState() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+        }
+
+        function showEmptyState(message = 'Enter a folder path above to browse files and folders') {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('fileList').style.display = 'none';
+            document.getElementById('fileGrid').style.display = 'none';
+            
+            document.querySelector('.empty-state div').textContent = message;
+        }
+
+        function updateBreadcrumb(path) {
+            const breadcrumb = document.getElementById('breadcrumb');
+            const parts = path.split('/').filter(part => part !== '');
+            
+            let html = '<span class="breadcrumb-item" onclick="navigateToPath(\'\')">This PC</span>';
+            let currentPath = '';
+            
+            parts.forEach((part, index) => {
+                currentPath += (index === 0 ? '' : '/') + part;
+                html += '<span class="breadcrumb-separator">></span>';
+                html += `<span class="breadcrumb-item" onclick="navigateToPath('${currentPath}')">${part}</span>`;
+            });
+            
+            breadcrumb.innerHTML = html;
+        }
+
+        function displayFiles(files) {
+            if (currentView === 'list') {
+                displayListView(files);
+            } else {
+                displayGridView(files);
+            }
+        }
+
+        function displayListView(files) {
+            document.getElementById('fileList').style.display = 'block';
+            document.getElementById('fileGrid').style.display = 'none';
+            
+            const content = document.getElementById('fileListContent');
+            let html = '';
+            
+            files.forEach((file, index) => {
+                const icon = getFileIcon(file);
+                const selected = selectedFiles.has(index) ? 'selected' : '';
+                
+                html += `
+                    <div class="file-item ${selected}" onclick="toggleFileSelection(${index})" ondblclick="openFile('${file.name}', ${file.isFolder})">
+                        <div class="file-icon ${file.isFolder ? 'folder-icon' : ''}">${icon}</div>
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-type">${file.type}</div>
+                        <div class="file-size">${file.size}</div>
+                        <div class="file-date">${file.date}</div>
+                    </div>
+                `;
+            });
+            
+            content.innerHTML = html;
+        }
+
+        function displayGridView(files) {
+            document.getElementById('fileList').style.display = 'none';
+            document.getElementById('fileGrid').style.display = 'grid';
+            
+            const grid = document.getElementById('fileGrid');
+            let html = '';
+            
+            files.forEach((file, index) => {
+                const icon = getFileIcon(file);
+                const selected = selectedFiles.has(index) ? 'selected' : '';
+                
+                html += `
+                    <div class="grid-item ${selected}" onclick="toggleFileSelection(${index})" ondblclick="openFile('${file.name}', ${file.isFolder})">
+                        <div class="grid-icon ${file.isFolder ? 'folder' : ''}">${icon}</div>
+                        <div class="grid-name">${file.name}</div>
+                    </div>
+                `;
+            });
+            
+            grid.innerHTML = html;
+        }
+
+        function getFileIcon(file) {
+            if (file.isFolder) return icons.folder;
+            
+            const ext = file.name.split('.').pop().toLowerCase();
+            switch (ext) {
+                case 'jpg':
+                case 'jpeg':
+                case 'png':
+                case 'gif':
+                case 'bmp':
+                    return icons.image;
+                case 'mp4':
+                case 'avi':
+                case 'mov':
+                case 'wmv':
+                    return icons.video;
+                case 'mp3':
+                case 'wav':
+                case 'flac':
+                    return icons.music;
+                case 'doc':
+                case 'docx':
+                case 'pdf':
+                case 'txt':
+                    return icons.document;
+                default:
+                    return icons.file;
+            }
+        }
+
+        // File interaction functions
+        function toggleFileSelection(index) {
+            if (selectedFiles.has(index)) {
+                selectedFiles.delete(index);
+            } else {
+                selectedFiles.add(index);
+            }
+            displayFiles(currentFiles);
+        }
+
+        function openFile(filename, isFolder) {
+            if (isFolder) {
+                // Navigate to subfolder
+                const newPath = currentPath + '/' + filename;
+                document.getElementById('pathInput').value = newPath;
+                loadPath();
+            } else {
+                // Handle file opening
+                alert(`Opening file: ${filename}`);
+            }
+        }
+
+        // View controls
+        function setView(view) {
+            currentView = view;
+            
+            document.getElementById('listView').classList.toggle('active', view === 'list');
+            document.getElementById('gridView').classList.toggle('active', view === 'grid');
+            
+            if (currentFiles.length > 0) {
+                displayFiles(currentFiles);
+            }
+        }
+
+        function sortFiles() {
+            const sortBy = document.getElementById('sortSelect').value;
+            
+            currentFiles.sort((a, b) => {
+                // Always put folders first
+                if (a.isFolder && !b.isFolder) return -1;
+                if (!a.isFolder && b.isFolder) return 1;
+                
+                switch (sortBy) {
+                    case 'name':
+                        return a.name.localeCompare(b.name);
+                    case 'type':
+                        return a.type.localeCompare(b.type);
+                    case 'size':
+                        if (a.isFolder && b.isFolder) return 0;
+                        return a.size.localeCompare(b.size);
+                    case 'date':
+                        return new Date(a.date) - new Date(b.date);
+                    default:
+                        return 0;
+                }
+            });
+            
+            displayFiles(currentFiles);
+        }
+
+        // Initialize
+        document.getElementById('pathInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                loadPath();
+            }
+        });
+    </script>
+</body>
+</html>
