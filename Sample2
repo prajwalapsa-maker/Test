@@ -1,0 +1,97 @@
+function createTreeNode(folder, folderPath) {
+  const node = document.createElement('div');
+  node.className = 'tree-node';
+
+  const item = document.createElement('div');
+  item.className = 'tree-item folder';
+  item.setAttribute('data-path', folderPath);
+
+  item.innerHTML = `
+    <span class="expand-icon">▶</span>
+    <span class="item-icon">📁</span>
+    <span class="item-name">${folder.name}</span>
+  `;
+
+  // When clicked → show folder contents in folder-body
+  item.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await toggleFolder(item, folderPath, folder);
+
+    // 🔥 NEW: Update folder-body explorer
+    renderFolderBody(folder);
+  });
+
+  node.appendChild(item);
+
+  // Container for children (nested tree)
+  const children = document.createElement('div');
+  children.className = 'tree-children';
+  children.style.display = 'none';
+  node.appendChild(children);
+
+  return node;
+}
+
+function renderFolderBody(folder) {
+  const grid = document.getElementById('folder-body');
+  grid.innerHTML = ''; // clear previous contents
+
+  // Show subfolders first
+  if (folder.folders && folder.folders.length > 0) {
+    folder.folders.forEach(subfolder => {
+      const card = document.createElement('div');
+      card.className = 'folder-card';
+      card.innerHTML = `
+        <div class="folder-icon">📁</div>
+        <div class="folder-name">${subfolder.name}</div>
+      `;
+
+      // Clicking opens subfolder (updates folder-body)
+      card.addEventListener('click', () => renderFolderBody(subfolder));
+      grid.appendChild(card);
+    });
+  }
+
+  // Show files
+  if (folder.files && folder.files.length > 0) {
+    folder.files.forEach(file => {
+      const card = document.createElement('div');
+      card.className = 'file-card';
+      card.innerHTML = `
+        <div class="file-icon">📄</div>
+        <div class="file-name">${file.name}</div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+}
+
+#folder-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px;
+}
+
+.folder-card, .file-card {
+  width: 120px;
+  text-align: center;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.folder-card:hover, .file-card:hover {
+  background-color: #f0f0f0;
+}
+
+.folder-icon, .file-icon {
+  font-size: 36px;
+}
+
+.folder-name, .file-name {
+  margin-top: 5px;
+  font-size: 14px;
+  word-wrap: break-word;
+}
