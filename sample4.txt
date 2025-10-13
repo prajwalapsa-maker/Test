@@ -1,318 +1,791 @@
-# explorer/views.py
-import os
-import mimetypes
-from pathlib import Path
-from django.shortcuts import render
-from django.http import JsonResponse, FileResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.conf import settings
-import json
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+            position: relative;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .change-folder-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        .change-folder-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .current-path {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            font-family: monospace;
+            background: rgba(255,255,255,0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .main-container {
+            display: flex;
+            height: calc(100vh - 70px);
+        }
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+        .sidebar-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #495057;
+        }
+        .tree-container {
+            padding: 10px 0;
+        }
+        .tree-node {
+            margin: 0;
+        }
+        .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            font-size: 0.9rem;
+        }
+        .tree-item:hover {
+            background: #f8f9fa;
+        }
+        .tree-item.active {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-right: 3px solid #1976d2;
+        }
+        .tree-item.folder {
+            font-weight: 500;
+        }
+        .tree-item.file {
+            color: #666;
+            padding-left: 40px;
+        }
+        .tree-item.file:hover {
+            color: #333;
+            background: #f0f0f0;
+        }
+        .expand-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #666;
+            transition: transform 0.2s ease;
+        }
+        .expand-icon.expanded {
+            transform: rotate(90deg);
+        }
+        .item-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        .item-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tree-children {
+            display: none;
+            padding-left: 20px;
+        }
+        .tree-children.expanded {
+            display: block;
+        }
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        .content-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .content-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #495057;
+        }
+        .content-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .welcome-screen {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        .welcome-screen .icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        .welcome-screen h2 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+        .welcome-screen p {
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+        .file-content {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.6;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        .file-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+        }
+        .file-info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .file-info-row:last-child {
+            margin-bottom: 0;
+        }
+        .file-info-label {
+            font-weight: 600;
+            color: #1976d2;
+        }
+        .file-info.binary-file {
+            background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+            border: 1px solid #ffcc02;
+        }
+        .file-content.binary-content {
+            background: #fff8e1;
+            border: 1px solid #ffcc02;
+            color: #e65100;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            white-space: pre-line;
+            line-height: 1.8;
+        }
+        .file-content.text-content {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            font-family: 'Courier New', monospace;
+        }
+        .download-btn {
+            background: linear-gradient(135deg, #4caf50, #45a049);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+        .download-btn:hover {
+            background: linear-gradient(135deg, #45a049, #4caf50);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+        }
+        .config-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .config-modal {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .config-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+        .input-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .folder-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        .folder-input:focus {
+            outline: none;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 3px rgba(25,118,210,0.1);
+        }
+        .set-folder-btn {
+            background: linear-gradient(135deg, #1976d2, #1565c0);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        .set-folder-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(25,118,210,0.3);
+        }
+        .path-examples {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        .path-example {
+            background: #f0f0f0;
+            color: #666;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+        .path-example:hover {
+            background: #1976d2;
+            color: white;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #1976d2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px;
+            border: 1px solid #ffcdd2;
+        }
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                height: 40%;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            .header {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+            }
+            .header-controls {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+        .sidebar::-webkit-scrollbar,
+        .content-body::-webkit-scrollbar,
+        .file-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        .sidebar::-webkit-scrollbar-track,
+        .content-body::-webkit-scrollbar-track,
+        .file-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .sidebar::-webkit-scrollbar-thumb,
+        .content-body::-webkit-scrollbar-thumb,
+        .file-content::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        .sidebar::-webkit-scrollbar-thumb:hover,
+        .content-body::-webkit-scrollbar-thumb:hover,
+        .file-content::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📁 File Explorer</h1>
+        <div class="header-controls" id="header-controls" style="display: none;">
+            <button class="change-folder-btn" onclick="showConfigView()">📁 Change Folder</button>
+            <div class="current-path" id="current-root-path"></div>
+        </div>
+    </div>
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header" id="sidebar-header">
+                📂 Folder Structure
+            </div>
+            <div class="tree-container" id="tree-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading folder structure...
+                </div>
+            </div>
+        </div>
+        <div class="content-area">
+            <div class="content-header" id="content-header" style="display: none;">
+                <div class="content-title" id="content-title">Select a file to view</div>
+            </div>
+            <div class="content-body" id="content-body">
+                <div class="welcome-screen">
+                    <div class="icon">📄</div>
+                    <h2>Welcome to File Explorer</h2>
+                    <p>Configure your root folder to start browsing files.<br>
+                    Click on folders in the left panel to expand them, and click on files to view their content here.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="config-overlay" class="config-overlay">
+        <div class="config-modal">
+            <h2 class="config-title">⚙️ Configure Root Folder</h2>
+            <div class="input-group">
+                <input type="text" id="folder-path-input"
+                        placeholder="Enter folder path (e.g., C:\Users\YourName\Documents)"
+                        class="folder-input">
+                <button onclick="setRootFolder()" class="set-folder-btn">Set Folder</button>
+            </div>
+            <div class="path-examples">
+                <span class="path-example" onclick="setExamplePath('C:\\Users')">C:\Users</span>
+                <span class="path-example" onclick="setExamplePath('C:\\Projects')">C:\Projects</span>
+                <span class="path-example" onclick="setExamplePath('C:\\Documents')">C:\Documents</span>
+                <span class="path-example" onclick="setExamplePath('C:\\Downloads')">C:\Downloads</span>
+                <span class="path-example" onclick="setExamplePath('/home')">Linux: /home</span>
+                <span class="path-example" onclick="setExamplePath('/Users')">Mac: /Users</span>
+            </div>
+        </div>
+    </div>
+    <div id="error-message" class="error" style="display: none;"></div>
+    <script>
+        let rootFolderName = '';
+        let isConfigured = false;
+        let currentSelectedFile = null;
+        let expandedFolders = new Set();
 
-def index(request):
-    """Render the main file explorer page"""
-    return render(request, 'explorer/index.html')
+        async function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def set_root(request):
-    """Set the root folder dynamically"""
-    try:
-        data = json.loads(request.body)
-        folder_path = data.get('folderPath', '').strip()
-        
-        if not folder_path:
-            return JsonResponse({'error': 'Folder path is required'}, status=400)
-        
-        folder_path = Path(folder_path).resolve()
-        
-        if not folder_path.exists():
-            return JsonResponse({'error': 'Path does not exist'}, status=400)
-        
-        if not folder_path.is_dir():
-            return JsonResponse({'error': 'Path is not a directory'}, status=400)
-        
-        # Store in session
-        request.session['root_folder'] = str(folder_path)
-        
-        return JsonResponse({
-            'success': True,
-            'rootPath': str(folder_path),
-            'folderName': folder_path.name
-        })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        async function initializeApp() {
+            try {
+                const rootResponse = await fetch('/api/root-info');
+                const rootData = await rootResponse.json();
+                
+                if (rootData.configured) {
+                    rootFolderName = rootData.folderName;
+                    isConfigured = true;
+                    await loadFolderStructure();
+                    hideConfigView();
+                } else {
+                    showConfigView();
+                }
+            } catch (error) {
+                showConfigView();
+            }
+        }
 
-def get_root_info(request):
-    """Get current root folder information"""
-    root_folder = request.session.get('root_folder', None)
-    
-    if not root_folder:
-        return JsonResponse({
-            'rootPath': None,
-            'folderName': None,
-            'configured': False
-        })
-    
-    root_path = Path(root_folder)
-    return JsonResponse({
-        'rootPath': str(root_path),
-        'folderName': root_path.name,
-        'configured': True
-    })
+        function showConfigView() {
+            document.getElementById('config-overlay').style.display = 'flex';
+        }
 
-def get_folders(request, folder_path=''):
-    """Get folder structure with subfolders and files"""
-    try:
-        root_folder = request.session.get('root_folder', None)
-        
-        if not root_folder:
-            return JsonResponse({'error': 'Root folder not configured'}, status=400)
-        
-        root_path = Path(root_folder)
-        full_path = root_path / folder_path if folder_path else root_path
-        
-        # Security check
-        full_path = full_path.resolve()
-        if not str(full_path).startswith(str(root_path)):
-            return JsonResponse({'error': 'Access denied'}, status=403)
-        
-        if not full_path.exists():
-            return JsonResponse({'error': 'Path does not exist'}, status=404)
-        
-        structure = {'folders': [], 'files': []}
-        
-        try:
-            items = sorted(full_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+        function hideConfigView() {
+            document.getElementById('config-overlay').style.display = 'none';
+            document.getElementById('header-controls').style.display = 'flex';
+        }
+
+        function setExamplePath(path) {
+            document.getElementById('folder-path-input').value = path;
+        }
+
+        async function setRootFolder() {
+            const folderPath = document.getElementById('folder-path-input').value.trim();
             
-            for item in items:
-                try:
-                    if item.is_dir():
-                        sub_folders = get_folder_structure(item)
-                        relative_path = str(item.relative_to(root_path)).replace('\\', '/')
-                        structure['folders'].append({
-                            'name': item.name,
-                            'path': relative_path,
-                            'subFolders': sub_folders
-                        })
-                    else:
-                        relative_path = str(item.relative_to(root_path)).replace('\\', '/')
-                        structure['files'].append({
-                            'name': item.name,
-                            'path': relative_path
-                        })
-                except PermissionError:
-                    continue
-        except PermissionError:
-            return JsonResponse({'error': 'Permission denied'}, status=403)
-        
-        return JsonResponse(structure)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+            if (!folderPath) {
+                alert('Please enter a folder path');
+                return;
+            }
+            try {
+                showLoading();
+                
+                const csrftoken = await getCookie('csrftoken');
+                const response = await fetch('/api/set-root', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken
+                    },
+                    body: JSON.stringify({ folderPath: folderPath })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    rootFolderName = result.folderName;
+                    isConfigured = true;
+                    await loadFolderStructure();
+                    hideConfigView();
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                showError(`Failed to set root folder: ${error.message}`);
+            }
+        }
 
-def get_folder_structure(dir_path):
-    """Recursively get folder structure (folders only)"""
-    folders = []
-    try:
-        items = sorted(dir_path.iterdir(), key=lambda x: x.name.lower())
-        for item in items:
-            try:
-                if item.is_dir():
-                    sub_folders = get_folder_structure(item)
-                    folders.append({
-                        'name': item.name,
-                        'subFolders': sub_folders
-                    })
-            except PermissionError:
-                continue
-    except PermissionError:
-        pass
-    return folders
+        async function loadFolderStructure() {
+            try {
+                showLoading();
+                
+                document.getElementById('sidebar-header').innerHTML = `📂 ${rootFolderName}`;
+                document.getElementById('current-root-path').textContent = rootFolderName;
+                const response = await fetch('/api/home-structure');
+                const structure = await response.json();
+                if (response.ok) {
+                    renderTreeStructure(structure);
+                } else {
+                    throw new Error(structure.error);
+                }
+            } catch (error) {
+                showError(`Failed to load directory structure: ${error.message}`);
+            }
+        }
 
-def get_home_structure(request):
-    """Get the root folder structure"""
-    try:
-        root_folder = request.session.get('root_folder', None)
-        
-        if not root_folder:
-            return JsonResponse({'error': 'Root folder not configured'}, status=400)
-        
-        root_path = Path(root_folder)
-        
-        if not root_path.exists():
-            return JsonResponse({'error': 'Root folder does not exist'}, status=404)
-        
-        structure = get_folder_structure(root_path)
-        return JsonResponse(structure, safe=False)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        function renderTreeStructure(folders, container = null, basePath = '') {
+            if (!container) {
+                container = document.getElementById('tree-container');
+                container.innerHTML = '';
+            }
+            folders.forEach(folder => {
+                const folderPath = basePath ? `${basePath}/${folder.name}` : folder.name;
+                const treeNode = createTreeNode(folder, folderPath);
+                container.appendChild(treeNode);
+            });
+        }
 
-def get_file_content(request, file_path):
-    """Get file content based on file type"""
-    try:
-        root_folder = request.session.get('root_folder', None)
-        
-        if not root_folder:
-            return JsonResponse({'error': 'Root folder not configured'}, status=400)
-        
-        root_path = Path(root_folder)
-        full_path = root_path / file_path
-        
-        # Security check
-        full_path = full_path.resolve()
-        if not str(full_path).startswith(str(root_path)):
-            return JsonResponse({'error': 'Access denied'}, status=403)
-        
-        if not full_path.exists():
-            return JsonResponse({'error': 'File not found'}, status=404)
-        
-        file_info = read_file_content(full_path)
-        return JsonResponse(file_info)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        function createTreeNode(folder, folderPath) {
+            const node = document.createElement('div');
+            node.className = 'tree-node';
+            const item = document.createElement('div');
+            item.className = 'tree-item folder';
+            item.setAttribute('data-path', folderPath);
+            const hasSubfolders = folder.subFolders && folder.subFolders.length > 0;
+            
+            item.innerHTML = `
+                <span class="expand-icon">${hasSubfolders ? '▶' : ''}</span>
+                <span class="item-icon">📁</span>
+                <span class="item-name">${folder.name}</span>
+            `;
+            item.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await toggleFolder(item, folderPath, folder);
+            });
+            node.appendChild(item);
+            if (hasSubfolders) {
+                const children = document.createElement('div');
+                children.className = 'tree-children';
+                children.style.display = 'none';
+                node.appendChild(children);
+            }
+            return node;
+        }
 
-def read_file_content(file_path):
-    """Read file content based on type"""
-    stats = file_path.stat()
-    ext = file_path.suffix.lower()
-    
-    file_info = {
-        'size': stats.st_size,
-        'modified': stats.st_mtime,
-        'type': ext[1:] if ext else 'unknown',
-        'isText': False,
-        'isBinary': False,
-        'content': '',
-        'error': None,
-        'downloadable': False
-    }
-    
-    try:
-        if ext == '.pdf':
-            file_info['isBinary'] = True
-            file_info['downloadable'] = True
-            file_info['content'] = (
-                'PDF files require a PDF viewer. '
-                'The file is available for download but cannot be displayed as text in this interface.'
-            )
-        elif ext in ['.xlsx', '.xls']:
-            file_info['isBinary'] = True
-            file_info['content'] = process_excel_file(file_path)
-        elif ext == '.docx':
-            file_info['isBinary'] = True
-            file_info['content'] = process_docx_file(file_path)
-        elif ext == '.doc':
-            file_info['isBinary'] = True
-            file_info['content'] = (
-                'Legacy DOC files require Microsoft Word or a compatible application. '
-                'Please convert to DOCX format for text extraction.'
-            )
-        elif ext in ['.pptx', '.ppt']:
-            file_info['isBinary'] = True
-            file_info['content'] = process_ppt_file(file_path)
-        else:
-            # Handle as text file
-            file_info['isText'] = True
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    file_info['content'] = f.read()
-            except UnicodeDecodeError:
-                # Try with different encoding
-                try:
-                    with open(file_path, 'r', encoding='latin-1') as f:
-                        file_info['content'] = f.read()
-                except Exception:
-                    file_info['content'] = 'Unable to decode file content. This may be a binary file.'
-    except Exception as e:
-        file_info['error'] = f'Error reading file: {str(e)}'
-        file_info['content'] = 'Unable to read file content. The file may be corrupted or in an unsupported format.'
-    
-    return file_info
+        async function toggleFolder(item, folderPath, folderData) {
+            const node = item.parentNode;
+            const children = node.querySelector('.tree-children');
+            const expandIcon = item.querySelector('.expand-icon');
+            
+            if (!children) return;
+            const isExpanded = children.classList.contains('expanded');
+            if (isExpanded) {
+                children.classList.remove('expanded');
+                children.style.display = 'none';
+                expandIcon.classList.remove('expanded');
+                expandedFolders.delete(folderPath);
+            } else {
+                try {
+                    if (!children.hasChildNodes()) {
+                        const response = await fetch(`/api/folders/${folderPath}`);
+                        const data = await response.json();
+                        if (response.ok) {
+                            data.folders.forEach(subfolder => {
+                                const subfolderPath = `${folderPath}/${subfolder.name}`;
+                                const subNode = createTreeNode(subfolder, subfolderPath);
+                                children.appendChild(subNode);
+                            });
+                            data.files.forEach(file => {
+                                const fileItem = createFileNode(file, folderPath);
+                                children.appendChild(fileItem);
+                            });
+                        } else {
+                            throw new Error(data.error);
+                        }
+                    }
+                    children.classList.add('expanded');
+                    children.style.display = 'block';
+                    expandIcon.classList.add('expanded');
+                    expandedFolders.add(folderPath);
+                } catch (error) {
+                    showError(`Failed to load folder contents: ${error.message}`);
+                }
+            }
+        }
 
-def process_excel_file(file_path):
-    """Process Excel files"""
-    stats = file_path.stat()
-    return f"""Excel File Detected
-===================
-File: {file_path.name}
-Size: {stats.st_size} bytes
+        function createFileNode(file, basePath) {
+            const item = document.createElement('div');
+            item.className = 'tree-item file';
+            item.setAttribute('data-path', file.path);
+            const extension = file.name.split('.').pop().toLowerCase();
+            let icon = '📄';
+            
+            const iconMap = {
+                'txt': '📝', 'md': '📝', 'markdown': '📝',
+                'js': '⚡', 'ts': '⚡', 'jsx': '⚡', 'tsx': '⚡',
+                'html': '🌐', 'htm': '🌐',
+                'css': '🎨', 'scss': '🎨', 'sass': '🎨',
+                'json': '⚙️', 'xml': '⚙️',
+                'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️',
+                'pdf': '📕',
+                'doc': '📘', 'docx': '📘',
+                'xls': '📊', 'xlsx': '📊',
+                'ppt': '📊', 'pptx': '📊',
+                'zip': '🗜️', 'rar': '🗜️', '7z': '🗜️',
+                'mp3': '🎵', 'wav': '🎵',
+                'mp4': '🎬', 'avi': '🎬', 'mkv': '🎬'
+            };
+            icon = iconMap[extension] || icon;
+            
+            item.innerHTML = `
+                <span class="expand-icon"></span>
+                <span class="item-icon">${icon}</span>
+                <span class="item-name">${file.name}</span>
+            `;
+            item.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await loadFileContent(file.path, file.name);
+                setActiveItem(item);
+            });
+            return item;
+        }
 
-This is an Excel file (.xlsx/.xls). To properly view the content, you would need:
-1. Microsoft Excel
-2. LibreOffice Calc
-3. Google Sheets
-4. Online Excel viewer
+        function setActiveItem(item) {
+            document.querySelectorAll('.tree-item.active').forEach(el => {
+                el.classList.remove('active');
+            });
+            item.classList.add('active');
+        }
 
-The file contains spreadsheet data with tables, formulas, and formatting that cannot be displayed as plain text.
+        async function loadFileContent(filePath, fileName) {
+            try {
+                const response = await fetch(`/api/file/${filePath}`);
+                const data = await response.json();
+                if (response.ok) {
+                    displayFileContent(data, fileName, filePath);
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                showError(`Failed to load file: ${error.message}`);
+            }
+        }
 
-Note: Full Excel parsing requires additional libraries like 'openpyxl' or 'xlrd' to extract worksheet data, formulas, and formatting."""
+        function displayFileContent(fileData, fileName, filePath) {
+            const contentHeader = document.getElementById('content-header');
+            const contentTitle = document.getElementById('content-title');
+            const contentBody = document.getElementById('content-body');
+            contentHeader.style.display = 'flex';
+            contentTitle.textContent = fileName;
+            const extension = fileName.split('.').pop().toLowerCase();
+            const isBinaryFile = ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'].includes(extension);
+            const downloadButton = fileData.downloadable ? `
+                <button class="download-btn" onclick="downloadFile('${filePath}', '${fileName}')">
+                    💾 Download File
+                </button>
+            ` : '';
+            const fileTypeInfo = getFileTypeDescription(extension);
+            const fileInfo = `
+                <div class="file-info ${isBinaryFile ? 'binary-file' : ''}">
+                    <div class="file-info-row">
+                        <span class="file-info-label">File Name:</span>
+                        <span class="file-info-value">${fileName}</span>
+                    </div>
+                    <div class="file-info-row">
+                        <span class="file-info-label">File Type:</span>
+                        <span class="file-info-value">${fileTypeInfo}</span>
+                    </div>
+                    <div class="file-info-row">
+                        <span class="file-info-label">Size:</span>
+                        <span class="file-info-value">${formatFileSize(fileData.size)}</span>
+                    </div>
+                    <div class="file-info-row">
+                        <span class="file-info-label">Last Modified:</span>
+                        <span class="file-info-value">${new Date(fileData.modified * 1000).toLocaleString()}</span>
+                    </div>
+                    ${downloadButton}
+                </div>
+                <div class="file-content ${isBinaryFile ? 'binary-content' : 'text-content'}">${fileData.content}</div>
+            `;
+            contentBody.innerHTML = fileInfo;
+        }
 
-def process_docx_file(file_path):
-    """Process DOCX files"""
-    stats = file_path.stat()
-    return f"""Word Document Detected
-======================
-File: {file_path.name}
-Size: {stats.st_size} bytes
+        function getFileTypeDescription(extension) {
+            const descriptions = {
+                'pdf': 'PDF Document', 'xlsx': 'Excel Spreadsheet (2007+)', 'xls': 'Excel Spreadsheet (Legacy)',
+                'docx': 'Word Document (2007+)', 'doc': 'Word Document (Legacy)',
+                'pptx': 'PowerPoint Presentation (2007+)', 'ppt': 'PowerPoint Presentation (Legacy)',
+                'txt': 'Plain Text', 'md': 'Markdown Document', 'js': 'JavaScript File',
+                'html': 'HTML Document', 'css': 'Stylesheet', 'json': 'JSON Data', 'xml': 'XML Document'
+            };
+            return descriptions[extension.toLowerCase()] || `${extension.toUpperCase()} File`;
+        }
 
-This is a Microsoft Word document (.docx). To properly view the content, you would need:
-1. Microsoft Word
-2. LibreOffice Writer
-3. Google Docs
-4. Online Word viewer
+        function downloadFile(filePath, fileName) {
+            const downloadUrl = `/api/download/${filePath}`;
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
 
-The file contains formatted text, images, tables, and other rich content that cannot be fully displayed as plain text.
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
 
-Note: Full DOCX text extraction requires libraries like 'python-docx' to extract the document content while preserving formatting."""
+        function showLoading() {
+            document.getElementById('tree-container').innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading folder structure...
+                </div>
+            `;
+        }
 
-def process_ppt_file(file_path):
-    """Process PowerPoint files"""
-    stats = file_path.stat()
-    ext = file_path.suffix.lower()
-    format_type = 'PowerPoint 2007+ (PPTX)' if ext == '.pptx' else 'PowerPoint Legacy (PPT)'
-    
-    return f"""PowerPoint Presentation Detected
-===============================
-File: {file_path.name}
-Size: {stats.st_size} bytes
-Format: {format_type}
+        function showError(message) {
+            const errorEl = document.getElementById('error-message');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            setTimeout(() => {
+                errorEl.style.display = 'none';
+            }, 5000);
+        }
 
-This is a Microsoft PowerPoint presentation. To properly view the content, you would need:
-1. Microsoft PowerPoint
-2. LibreOffice Impress
-3. Google Slides
-4. Online PowerPoint viewer
-
-The file contains slides with text, images, animations, and other multimedia content that cannot be displayed as plain text.
-
-Note: PowerPoint file parsing requires specialized libraries to extract slide content, speaker notes, and embedded media."""
-
-def download_file(request, file_path):
-    """Download file"""
-    try:
-        root_folder = request.session.get('root_folder', None)
-        
-        if not root_folder:
-            return JsonResponse({'error': 'Root folder not configured'}, status=400)
-        
-        root_path = Path(root_folder)
-        full_path = root_path / file_path
-        
-        # Security check
-        full_path = full_path.resolve()
-        if not str(full_path).startswith(str(root_path)):
-            return JsonResponse({'error': 'Access denied'}, status=403)
-        
-        if not full_path.exists():
-            return JsonResponse({'error': 'File not found'}, status=404)
-        
-        # Determine mime type
-        mime_type, _ = mimetypes.guess_type(str(full_path))
-        if mime_type is None:
-            mime_type = 'application/octet-stream'
-        
-        response = FileResponse(open(full_path, 'rb'), content_type=mime_type)
-        response['Content-Disposition'] = f'attachment; filename="{full_path.name}"'
-        return response
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        initializeApp();
+        document.getElementById('folder-path-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                setRootFolder();
+            }
+        });
+    </script>
+</body>
+</html>
