@@ -1,15 +1,318 @@
-# explorer/urls.py
-from django.urls import path, re_path
-from . import views
+# explorer/views.py
+import os
+import mimetypes
+from pathlib import Path
+from django.shortcuts import render
+from django.http import JsonResponse, FileResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from django.conf import settings
+import json
 
-app_name = 'explorer'
+def index(request):
+    """Render the main file explorer page"""
+    return render(request, 'explorer/index.html')
 
-urlpatterns = [
-    path('', views.index, name='index'),
-    path('api/set-root', views.set_root, name='set_root'),
-    path('api/root-info', views.get_root_info, name='root_info'),
-    path('api/home-structure', views.get_home_structure, name='home_structure'),
-    re_path(r'^api/folders/(?P<folder_path>.*)$', views.get_folders, name='get_folders'),
-    re_path(r'^api/file/(?P<file_path>.*)$', views.get_file_content, name='get_file'),
-    re_path(r'^api/download/(?P<file_path>.*)$', views.download_file, name='download_file'),
-]
+@csrf_exempt
+@require_http_methods(["POST"])
+def set_root(request):
+    """Set the root folder dynamically"""
+    try:
+        data = json.loads(request.body)
+        folder_path = data.get('folderPath', '').strip()
+        
+        if not folder_path:
+            return JsonResponse({'error': 'Folder path is required'}, status=400)
+        
+        folder_path = Path(folder_path).resolve()
+        
+        if not folder_path.exists():
+            return JsonResponse({'error': 'Path does not exist'}, status=400)
+        
+        if not folder_path.is_dir():
+            return JsonResponse({'error': 'Path is not a directory'}, status=400)
+        
+        # Store in session
+        request.session['root_folder'] = str(folder_path)
+        
+        return JsonResponse({
+            'success': True,
+            'rootPath': str(folder_path),
+            'folderName': folder_path.name
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+def get_root_info(request):
+    """Get current root folder information"""
+    root_folder = request.session.get('root_folder', None)
+    
+    if not root_folder:
+        return JsonResponse({
+            'rootPath': None,
+            'folderName': None,
+            'configured': False
+        })
+    
+    root_path = Path(root_folder)
+    return JsonResponse({
+        'rootPath': str(root_path),
+        'folderName': root_path.name,
+        'configured': True
+    })
+
+def get_folders(request, folder_path=''):
+    """Get folder structure with subfolders and files"""
+    try:
+        root_folder = request.session.get('root_folder', None)
+        
+        if not root_folder:
+            return JsonResponse({'error': 'Root folder not configured'}, status=400)
+        
+        root_path = Path(root_folder)
+        full_path = root_path / folder_path if folder_path else root_path
+        
+        # Security check
+        full_path = full_path.resolve()
+        if not str(full_path).startswith(str(root_path)):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        if not full_path.exists():
+            return JsonResponse({'error': 'Path does not exist'}, status=404)
+        
+        structure = {'folders': [], 'files': []}
+        
+        try:
+            items = sorted(full_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+            
+            for item in items:
+                try:
+                    if item.is_dir():
+                        sub_folders = get_folder_structure(item)
+                        relative_path = str(item.relative_to(root_path)).replace('\\', '/')
+                        structure['folders'].append({
+                            'name': item.name,
+                            'path': relative_path,
+                            'subFolders': sub_folders
+                        })
+                    else:
+                        relative_path = str(item.relative_to(root_path)).replace('\\', '/')
+                        structure['files'].append({
+                            'name': item.name,
+                            'path': relative_path
+                        })
+                except PermissionError:
+                    continue
+        except PermissionError:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        return JsonResponse(structure)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+def get_folder_structure(dir_path):
+    """Recursively get folder structure (folders only)"""
+    folders = []
+    try:
+        items = sorted(dir_path.iterdir(), key=lambda x: x.name.lower())
+        for item in items:
+            try:
+                if item.is_dir():
+                    sub_folders = get_folder_structure(item)
+                    folders.append({
+                        'name': item.name,
+                        'subFolders': sub_folders
+                    })
+            except PermissionError:
+                continue
+    except PermissionError:
+        pass
+    return folders
+
+def get_home_structure(request):
+    """Get the root folder structure"""
+    try:
+        root_folder = request.session.get('root_folder', None)
+        
+        if not root_folder:
+            return JsonResponse({'error': 'Root folder not configured'}, status=400)
+        
+        root_path = Path(root_folder)
+        
+        if not root_path.exists():
+            return JsonResponse({'error': 'Root folder does not exist'}, status=404)
+        
+        structure = get_folder_structure(root_path)
+        return JsonResponse(structure, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+def get_file_content(request, file_path):
+    """Get file content based on file type"""
+    try:
+        root_folder = request.session.get('root_folder', None)
+        
+        if not root_folder:
+            return JsonResponse({'error': 'Root folder not configured'}, status=400)
+        
+        root_path = Path(root_folder)
+        full_path = root_path / file_path
+        
+        # Security check
+        full_path = full_path.resolve()
+        if not str(full_path).startswith(str(root_path)):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        if not full_path.exists():
+            return JsonResponse({'error': 'File not found'}, status=404)
+        
+        file_info = read_file_content(full_path)
+        return JsonResponse(file_info)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+def read_file_content(file_path):
+    """Read file content based on type"""
+    stats = file_path.stat()
+    ext = file_path.suffix.lower()
+    
+    file_info = {
+        'size': stats.st_size,
+        'modified': stats.st_mtime,
+        'type': ext[1:] if ext else 'unknown',
+        'isText': False,
+        'isBinary': False,
+        'content': '',
+        'error': None,
+        'downloadable': False
+    }
+    
+    try:
+        if ext == '.pdf':
+            file_info['isBinary'] = True
+            file_info['downloadable'] = True
+            file_info['content'] = (
+                'PDF files require a PDF viewer. '
+                'The file is available for download but cannot be displayed as text in this interface.'
+            )
+        elif ext in ['.xlsx', '.xls']:
+            file_info['isBinary'] = True
+            file_info['content'] = process_excel_file(file_path)
+        elif ext == '.docx':
+            file_info['isBinary'] = True
+            file_info['content'] = process_docx_file(file_path)
+        elif ext == '.doc':
+            file_info['isBinary'] = True
+            file_info['content'] = (
+                'Legacy DOC files require Microsoft Word or a compatible application. '
+                'Please convert to DOCX format for text extraction.'
+            )
+        elif ext in ['.pptx', '.ppt']:
+            file_info['isBinary'] = True
+            file_info['content'] = process_ppt_file(file_path)
+        else:
+            # Handle as text file
+            file_info['isText'] = True
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    file_info['content'] = f.read()
+            except UnicodeDecodeError:
+                # Try with different encoding
+                try:
+                    with open(file_path, 'r', encoding='latin-1') as f:
+                        file_info['content'] = f.read()
+                except Exception:
+                    file_info['content'] = 'Unable to decode file content. This may be a binary file.'
+    except Exception as e:
+        file_info['error'] = f'Error reading file: {str(e)}'
+        file_info['content'] = 'Unable to read file content. The file may be corrupted or in an unsupported format.'
+    
+    return file_info
+
+def process_excel_file(file_path):
+    """Process Excel files"""
+    stats = file_path.stat()
+    return f"""Excel File Detected
+===================
+File: {file_path.name}
+Size: {stats.st_size} bytes
+
+This is an Excel file (.xlsx/.xls). To properly view the content, you would need:
+1. Microsoft Excel
+2. LibreOffice Calc
+3. Google Sheets
+4. Online Excel viewer
+
+The file contains spreadsheet data with tables, formulas, and formatting that cannot be displayed as plain text.
+
+Note: Full Excel parsing requires additional libraries like 'openpyxl' or 'xlrd' to extract worksheet data, formulas, and formatting."""
+
+def process_docx_file(file_path):
+    """Process DOCX files"""
+    stats = file_path.stat()
+    return f"""Word Document Detected
+======================
+File: {file_path.name}
+Size: {stats.st_size} bytes
+
+This is a Microsoft Word document (.docx). To properly view the content, you would need:
+1. Microsoft Word
+2. LibreOffice Writer
+3. Google Docs
+4. Online Word viewer
+
+The file contains formatted text, images, tables, and other rich content that cannot be fully displayed as plain text.
+
+Note: Full DOCX text extraction requires libraries like 'python-docx' to extract the document content while preserving formatting."""
+
+def process_ppt_file(file_path):
+    """Process PowerPoint files"""
+    stats = file_path.stat()
+    ext = file_path.suffix.lower()
+    format_type = 'PowerPoint 2007+ (PPTX)' if ext == '.pptx' else 'PowerPoint Legacy (PPT)'
+    
+    return f"""PowerPoint Presentation Detected
+===============================
+File: {file_path.name}
+Size: {stats.st_size} bytes
+Format: {format_type}
+
+This is a Microsoft PowerPoint presentation. To properly view the content, you would need:
+1. Microsoft PowerPoint
+2. LibreOffice Impress
+3. Google Slides
+4. Online PowerPoint viewer
+
+The file contains slides with text, images, animations, and other multimedia content that cannot be displayed as plain text.
+
+Note: PowerPoint file parsing requires specialized libraries to extract slide content, speaker notes, and embedded media."""
+
+def download_file(request, file_path):
+    """Download file"""
+    try:
+        root_folder = request.session.get('root_folder', None)
+        
+        if not root_folder:
+            return JsonResponse({'error': 'Root folder not configured'}, status=400)
+        
+        root_path = Path(root_folder)
+        full_path = root_path / file_path
+        
+        # Security check
+        full_path = full_path.resolve()
+        if not str(full_path).startswith(str(root_path)):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        if not full_path.exists():
+            return JsonResponse({'error': 'File not found'}, status=404)
+        
+        # Determine mime type
+        mime_type, _ = mimetypes.guess_type(str(full_path))
+        if mime_type is None:
+            mime_type = 'application/octet-stream'
+        
+        response = FileResponse(open(full_path, 'rb'), content_type=mime_type)
+        response['Content-Disposition'] = f'attachment; filename="{full_path.name}"'
+        return response
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
