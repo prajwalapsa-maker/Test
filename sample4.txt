@@ -1,0 +1,15 @@
+# explorer/urls.py
+from django.urls import path, re_path
+from . import views
+
+app_name = 'explorer'
+
+urlpatterns = [
+    path('', views.index, name='index'),
+    path('api/set-root', views.set_root, name='set_root'),
+    path('api/root-info', views.get_root_info, name='root_info'),
+    path('api/home-structure', views.get_home_structure, name='home_structure'),
+    re_path(r'^api/folders/(?P<folder_path>.*)$', views.get_folders, name='get_folders'),
+    re_path(r'^api/file/(?P<file_path>.*)$', views.get_file_content, name='get_file'),
+    re_path(r'^api/download/(?P<file_path>.*)$', views.download_file, name='download_file'),
+]
