@@ -1,0 +1,32 @@
+var oTable = $('#example').DataTable({
+    // your existing config…
+});
+
+// 1. Populate dropdown after data is loaded
+oTable.on('xhr', function() {
+
+    $('#tubeFilter').find('option:not(:first)').remove();
+
+    let uniqueTubes = [];
+
+    oTable.column(2).data().each(function(value) {
+        if (value && uniqueTubes.indexOf(value) === -1) {
+            uniqueTubes.push(value);
+        }
+    });
+
+    uniqueTubes.sort().forEach(function(tube) {
+        $('#tubeFilter').append(`<option value="${tube}">${tube}</option>`);
+    });
+});
+
+// 2. Filter table when dropdown changes
+$('#tubeFilter').on('change', function () {
+    let value = $(this).val();
+
+    if (value === "") {
+        oTable.column(2).search("").draw();
+    } else {
+        oTable.column(2).search("^" + value + "$", true, false).draw();
+    }
+});
